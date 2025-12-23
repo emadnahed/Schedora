@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from schedora.repositories.workflow_repository import WorkflowRepository
 from schedora.models.workflow import Workflow
 from schedora.core.exceptions import DuplicateWorkflowError, WorkflowNotFoundError
-from schedora.core.enums import JobStatus
+from schedora.core.enums import JobStatus, WorkflowStatus
 
 
 class WorkflowService:
@@ -48,12 +48,15 @@ class WorkflowService:
             raise DuplicateWorkflowError(f"Workflow with name '{name}' already exists")
 
         try:
-            return self.repository.create(
+            workflow = self.repository.create(
                 name=name,
                 description=description,
                 config=config
             )
+            self.db.commit()
+            return workflow
         except IntegrityError as e:
+            self.db.rollback()
             raise DuplicateWorkflowError(f"Workflow with name '{name}' already exists") from e
 
     def get_workflow(self, workflow_id: UUID) -> Workflow:
@@ -87,6 +90,7 @@ class WorkflowService:
         """
         workflow = self.get_workflow(workflow_id)
         self.repository.add_job(workflow_id, job_id)
+        self.db.commit()
 
     def get_workflow_status(self, workflow_id: UUID) -> Dict[str, Any]:
         """
@@ -111,13 +115,13 @@ class WorkflowService:
 
         # Determine overall workflow status
         if failed_jobs > 0:
-            overall_status = "FAILED"
+            overall_status = WorkflowStatus.FAILED
         elif completed_jobs == total_jobs and total_jobs > 0:
-            overall_status = "COMPLETED"
+            overall_status = WorkflowStatus.COMPLETED
         elif running_jobs > 0:
-            overall_status = "RUNNING"
+            overall_status = WorkflowStatus.RUNNING
         else:
-            overall_status = "PENDING"
+            overall_status = WorkflowStatus.PENDING
 
         return {
             "workflow_id": str(workflow.workflow_id),
@@ -126,7 +130,7 @@ class WorkflowService:
             "completed_jobs": completed_jobs,
             "failed_jobs": failed_jobs,
             "running_jobs": running_jobs,
-            "status": overall_status
+            "status": str(overall_status)  # Convert enum to string for JSON serialization
         }
 
     def list_workflows(self, limit: int = 100) -> List[Workflow]:

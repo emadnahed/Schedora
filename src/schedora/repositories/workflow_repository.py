@@ -34,6 +34,9 @@ class WorkflowRepository:
 
         Returns:
             Workflow: Created workflow instance
+
+        Note:
+            Transaction management is handled by the service layer.
         """
         workflow = Workflow(
             name=name,
@@ -41,8 +44,7 @@ class WorkflowRepository:
             config=config
         )
         self.db.add(workflow)
-        self.db.commit()
-        self.db.refresh(workflow)
+        self.db.flush()  # Flush to get the ID without committing
         return workflow
 
     def get_by_id(self, workflow_id: UUID) -> Optional[Workflow]:
@@ -76,13 +78,16 @@ class WorkflowRepository:
         Args:
             workflow_id: Workflow UUID
             job_id: Job UUID
+
+        Note:
+            Transaction management is handled by the service layer.
         """
         workflow = self.get_by_id(workflow_id)
         job = self.db.query(Job).filter(Job.job_id == job_id).first()
 
         if workflow and job:
             workflow.jobs.append(job)
-            self.db.commit()
+            self.db.flush()
 
     def get_workflow_jobs(self, workflow_id: UUID) -> List[Job]:
         """

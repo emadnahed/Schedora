@@ -43,3 +43,23 @@ class RetryPolicy(str, Enum):
     def __str__(self) -> str:
         """Return string representation of the enum value."""
         return self.value
+
+
+class WorkflowStatus(str, Enum):
+    """
+    Workflow execution status states.
+
+    - PENDING: No jobs have started executing
+    - RUNNING: At least one job is running or scheduled
+    - COMPLETED: All jobs completed successfully
+    - FAILED: At least one job failed
+    """
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+    def __str__(self) -> str:
+        """Return string representation of the enum value."""
+        return self.value

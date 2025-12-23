@@ -118,8 +118,15 @@ class Job(Base, TimestampMixin):
         Index("idx_jobs_created_at_desc", "created_at", postgresql_using="btree"),
     )
 
-    # Relationships (defined dynamically to avoid circular imports)
-    # workflows relationship is defined in Workflow model with back_populates
+    # Relationships
+
+    # Workflow membership: workflows this job belongs to
+    workflows: Mapped[List["Workflow"]] = relationship(  # type: ignore
+        "Workflow",
+        secondary="workflow_jobs",
+        back_populates="jobs",
+        lazy="selectin",
+    )
 
     # DAG dependencies: jobs that this job depends on
     dependencies: Mapped[List["Job"]] = relationship(
@@ -127,8 +134,19 @@ class Job(Base, TimestampMixin):
         secondary=job_dependencies,
         primaryjoin="Job.job_id==job_dependencies.c.job_id",
         secondaryjoin="Job.job_id==job_dependencies.c.depends_on_job_id",
-        backref="dependents",
+        back_populates="dependents",
         lazy="selectin",
+    )
+
+    # DAG dependents: jobs that depend on this job
+    dependents: Mapped[List["Job"]] = relationship(
+        "Job",
+        secondary=job_dependencies,
+        primaryjoin="Job.job_id==job_dependencies.c.depends_on_job_id",
+        secondaryjoin="Job.job_id==job_dependencies.c.job_id",
+        back_populates="dependencies",
+        lazy="selectin",
+        overlaps="dependencies",
     )
 
     def __repr__(self) -> str:

@@ -3,10 +3,9 @@ import uuid
 from typing import Optional, List
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from schedora.models.job import Job
+from sqlalchemy import and_, select
+from schedora.models.job import Job, job_dependencies
 from schedora.core.enums import JobStatus
-from schedora.services.dependency_resolver import DependencyResolver
 
 
 class Scheduler:
@@ -22,13 +21,15 @@ class Scheduler:
         """
         self.db = db
         self.worker_id = worker_id or f"worker-{uuid.uuid4()}"
-        self.dependency_resolver = DependencyResolver(db)
 
     def claim_job(self) -> Optional[Job]:
         """
         Claim a single ready job atomically.
 
         Uses SELECT FOR UPDATE SKIP LOCKED for concurrent-safe claiming.
+        Dependencies are checked in the SQL query before locking to minimize
+        lock contention.
+
         Only claims jobs that are:
         - Status: PENDING
         - scheduled_at <= now
@@ -39,14 +40,23 @@ class Scheduler:
         """
         now = datetime.now(timezone.utc)
 
+        # Subquery to find jobs with unmet dependencies
+        unmet_deps_subquery = (
+            select(job_dependencies.c.job_id)
+            .join(Job, Job.job_id == job_dependencies.c.depends_on_job_id)
+            .where(Job.status != JobStatus.SUCCESS)
+        )
+
         # Query for pending jobs that are ready to be scheduled
+        # Include dependency check in the query to avoid locking jobs that aren't ready
         # Use FOR UPDATE SKIP LOCKED to prevent concurrent claims
         job = (
             self.db.query(Job)
             .filter(
                 and_(
                     Job.status == JobStatus.PENDING,
-                    Job.scheduled_at <= now
+                    Job.scheduled_at <= now,
+                    ~Job.job_id.in_(unmet_deps_subquery)  # Only jobs with met dependencies
                 )
             )
             .with_for_update(skip_locked=True)
@@ -54,10 +64,6 @@ class Scheduler:
         )
 
         if not job:
-            return None
-
-        # Check if dependencies are met
-        if not self.dependency_resolver.are_dependencies_met(job):
             return None
 
         # Claim the job
@@ -78,15 +84,22 @@ class Scheduler:
             List[Job]: List of claimed jobs
         """
         now = datetime.now(timezone.utc)
-        claimed_jobs = []
 
-        # Query for pending jobs
+        # Subquery to find jobs with unmet dependencies
+        unmet_deps_subquery = (
+            select(job_dependencies.c.job_id)
+            .join(Job, Job.job_id == job_dependencies.c.depends_on_job_id)
+            .where(Job.status != JobStatus.SUCCESS)
+        )
+
+        # Query for pending jobs with met dependencies
         candidate_jobs = (
             self.db.query(Job)
             .filter(
                 and_(
                     Job.status == JobStatus.PENDING,
-                    Job.scheduled_at <= now
+                    Job.scheduled_at <= now,
+                    ~Job.job_id.in_(unmet_deps_subquery)  # Only jobs with met dependencies
                 )
             )
             .with_for_update(skip_locked=True)
@@ -94,12 +107,12 @@ class Scheduler:
             .all()
         )
 
+        # Claim all candidate jobs
+        claimed_jobs = []
         for job in candidate_jobs:
-            # Check dependencies for each job
-            if self.dependency_resolver.are_dependencies_met(job):
-                job.status = JobStatus.SCHEDULED
-                job.worker_id = self.worker_id
-                claimed_jobs.append(job)
+            job.status = JobStatus.SCHEDULED
+            job.worker_id = self.worker_id
+            claimed_jobs.append(job)
 
         if claimed_jobs:
             self.db.commit()

@@ -42,6 +42,7 @@ class Workflow(Base, TimestampMixin):
     jobs: Mapped[List["Job"]] = relationship(  # type: ignore
         "Job",
         secondary=workflow_jobs,
+        back_populates="workflows",
         lazy="selectin",
     )
 

@@ -1,7 +1,8 @@
 """Dependency resolution service for DAG workflows."""
 from typing import List
 from sqlalchemy.orm import Session
-from schedora.models.job import Job
+from sqlalchemy import select, exists
+from schedora.models.job import Job, job_dependencies
 from schedora.core.enums import JobStatus
 
 
@@ -51,25 +52,32 @@ class DependencyResolver:
         """
         Get jobs that are ready to execute (dependencies met, status PENDING).
 
+        Uses optimized SQL query with subquery to filter at database level.
+
         Args:
             limit: Maximum number of jobs to return
 
         Returns:
             List[Job]: Jobs ready for execution
         """
-        # Get pending jobs
-        pending_jobs = (
+        # Subquery to find jobs that have at least one unmet dependency
+        # A dependency is unmet if it's not in SUCCESS state
+        unmet_deps_subquery = (
+            select(job_dependencies.c.job_id)
+            .join(Job, Job.job_id == job_dependencies.c.depends_on_job_id)
+            .where(Job.status != JobStatus.SUCCESS)
+        )
+
+        # Get PENDING jobs that either:
+        # 1. Have no dependencies (not in job_dependencies table)
+        # 2. All dependencies are SUCCESS (not in unmet_deps_subquery)
+        ready_jobs = (
             self.db.query(Job)
             .filter(Job.status == JobStatus.PENDING)
+            .filter(~Job.job_id.in_(unmet_deps_subquery))
             .limit(limit)
             .all()
         )
-
-        # Filter to only those with met dependencies
-        ready_jobs = [
-            job for job in pending_jobs
-            if self.are_dependencies_met(job)
-        ]
 
         return ready_jobs
 
@@ -77,18 +85,26 @@ class DependencyResolver:
         """
         Get jobs that are blocked due to failed dependencies.
 
+        Uses optimized SQL query with subquery to filter at database level.
+
         Returns:
             List[Job]: Jobs that cannot proceed due to failed dependencies
         """
-        pending_jobs = (
-            self.db.query(Job)
-            .filter(Job.status == JobStatus.PENDING)
-            .all()
+        failed_states = {JobStatus.FAILED, JobStatus.DEAD, JobStatus.CANCELED}
+
+        # Subquery to find jobs that have at least one failed dependency
+        failed_deps_subquery = (
+            select(job_dependencies.c.job_id)
+            .join(Job, Job.job_id == job_dependencies.c.depends_on_job_id)
+            .where(Job.status.in_(failed_states))
         )
 
-        blocked_jobs = [
-            job for job in pending_jobs
-            if self.has_failed_dependencies(job)
-        ]
+        # Get PENDING jobs that have at least one failed dependency
+        blocked_jobs = (
+            self.db.query(Job)
+            .filter(Job.status == JobStatus.PENDING)
+            .filter(Job.job_id.in_(failed_deps_subquery))
+            .all()
+        )
 
         return blocked_jobs

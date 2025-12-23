@@ -2,9 +2,8 @@
 from uuid import UUID
 from typing import Annotated, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 
-from schedora.api.deps import get_db
+from schedora.api.deps import get_workflow_service
 from schedora.api.schemas.workflow import (
     WorkflowCreate,
     WorkflowResponse,
@@ -24,14 +23,14 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 @router.post("", response_model=StandardResponse[WorkflowResponse], status_code=status.HTTP_201_CREATED)
 def create_workflow(
     workflow_data: WorkflowCreate,
-    db: Annotated[Session, Depends(get_db)]
+    service: Annotated[WorkflowService, Depends(get_workflow_service)]
 ) -> StandardResponse[WorkflowResponse]:
     """
     Create a new workflow.
 
     Args:
         workflow_data: Workflow creation data
-        db: Database session
+        service: Workflow service (injected)
 
     Returns:
         StandardResponse: Created workflow
@@ -39,7 +38,6 @@ def create_workflow(
     Raises:
         HTTPException: 409 if workflow with same name already exists
     """
-    service = WorkflowService(db)
 
     try:
         workflow = service.create_workflow(
@@ -68,14 +66,14 @@ def create_workflow(
 @router.get("/{workflow_id}", response_model=StandardResponse[WorkflowResponse])
 def get_workflow(
     workflow_id: UUID,
-    db: Annotated[Session, Depends(get_db)]
+    service: Annotated[WorkflowService, Depends(get_workflow_service)]
 ) -> StandardResponse[WorkflowResponse]:
     """
     Get workflow by ID.
 
     Args:
         workflow_id: Workflow UUID
-        db: Database session
+        service: Workflow service (injected)
 
     Returns:
         StandardResponse: Workflow details
@@ -83,7 +81,6 @@ def get_workflow(
     Raises:
         HTTPException: 404 if workflow not found
     """
-    service = WorkflowService(db)
 
     try:
         workflow = service.get_workflow(workflow_id)
@@ -109,7 +106,7 @@ def get_workflow(
 def add_job_to_workflow(
     workflow_id: UUID,
     job_data: AddJobToWorkflowRequest,
-    db: Annotated[Session, Depends(get_db)]
+    service: Annotated[WorkflowService, Depends(get_workflow_service)]
 ) -> StandardResponse[Dict[str, str]]:
     """
     Add a job to a workflow.
@@ -117,7 +114,7 @@ def add_job_to_workflow(
     Args:
         workflow_id: Workflow UUID
         job_data: Job to add
-        db: Database session
+        service: Workflow service (injected)
 
     Returns:
         StandardResponse: Success message
@@ -125,7 +122,6 @@ def add_job_to_workflow(
     Raises:
         HTTPException: 404 if workflow not found
     """
-    service = WorkflowService(db)
 
     try:
         service.add_job_to_workflow(workflow_id, job_data.job_id)
@@ -150,14 +146,14 @@ def add_job_to_workflow(
 @router.get("/{workflow_id}/status", response_model=StandardResponse[WorkflowStatusResponse])
 def get_workflow_status(
     workflow_id: UUID,
-    db: Annotated[Session, Depends(get_db)]
+    service: Annotated[WorkflowService, Depends(get_workflow_service)]
 ) -> StandardResponse[WorkflowStatusResponse]:
     """
     Get workflow execution status.
 
     Args:
         workflow_id: Workflow UUID
-        db: Database session
+        service: Workflow service (injected)
 
     Returns:
         StandardResponse: Workflow status with job counts
@@ -165,7 +161,6 @@ def get_workflow_status(
     Raises:
         HTTPException: 404 if workflow not found
     """
-    service = WorkflowService(db)
 
     try:
         status_dict = service.get_workflow_status(workflow_id)
