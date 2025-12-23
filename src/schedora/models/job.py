@@ -1,7 +1,7 @@
 """Job model for distributed job orchestration."""
 from datetime import datetime, timezone
 from uuid import uuid4
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from sqlalchemy import (
     String,
     Integer,
@@ -10,12 +10,23 @@ from sqlalchemy import (
     Text,
     DateTime,
     Enum as SQLEnum,
+    Table,
+    Column,
+    ForeignKey,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from schedora.core.database import Base
 from schedora.core.enums import JobStatus, RetryPolicy
 from schedora.models.base import TimestampMixin
+
+# Job dependencies table for DAG support (many-to-many self-referential)
+job_dependencies = Table(
+    "job_dependencies",
+    Base.metadata,
+    Column("job_id", UUID(as_uuid=True), ForeignKey("jobs.job_id"), primary_key=True),
+    Column("depends_on_job_id", UUID(as_uuid=True), ForeignKey("jobs.job_id"), primary_key=True),
+)
 
 
 class Job(Base, TimestampMixin):
@@ -105,6 +116,19 @@ class Job(Base, TimestampMixin):
         ),
         Index("idx_jobs_status_scheduled_at", "status", "scheduled_at"),
         Index("idx_jobs_created_at_desc", "created_at", postgresql_using="btree"),
+    )
+
+    # Relationships (defined dynamically to avoid circular imports)
+    # workflows relationship is defined in Workflow model with back_populates
+
+    # DAG dependencies: jobs that this job depends on
+    dependencies: Mapped[List["Job"]] = relationship(
+        "Job",
+        secondary=job_dependencies,
+        primaryjoin="Job.job_id==job_dependencies.c.job_id",
+        secondaryjoin="Job.job_id==job_dependencies.c.depends_on_job_id",
+        backref="dependents",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:
