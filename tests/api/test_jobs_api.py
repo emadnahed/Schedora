@@ -22,7 +22,19 @@ class TestJobsAPI:
         response = client.post("/api/v1/jobs", json=job_data)
 
         assert response.status_code == 201
-        data = response.json()
+        json_response = response.json()
+
+        # Check standard response format
+        assert "data" in json_response
+        assert "code" in json_response
+        assert "httpStatus" in json_response
+        assert "description" in json_response
+
+        assert json_response["code"] == "JOB_0001"
+        assert json_response["httpStatus"] == "CREATED"
+
+        # Check data payload
+        data = json_response["data"]
         assert data["type"] == "email_notification"
         assert data["status"] == "PENDING"
         assert "job_id" in data
@@ -42,7 +54,11 @@ class TestJobsAPI:
         # Second creation with same key fails
         response2 = client.post("/api/v1/jobs", json=job_data)
         assert response2.status_code == 409
-        assert "idempotency" in response2.json()["detail"].lower()
+
+        error_detail = response2.json()["detail"]
+        assert error_detail["code"] == "JOB_4002"
+        assert error_detail["httpStatus"] == "CONFLICT"
+        assert "idempotency" in error_detail["description"].lower()
 
     def test_create_job_validation_error(self, client: TestClient):
         """Test job creation with invalid data."""
@@ -72,7 +88,12 @@ class TestJobsAPI:
         response = client.get(f"/api/v1/jobs/{job.job_id}")
 
         assert response.status_code == 200
-        data = response.json()
+        json_response = response.json()
+
+        assert json_response["code"] == "JOB_0002"
+        assert json_response["httpStatus"] == "OK"
+
+        data = json_response["data"]
         assert data["job_id"] == str(job.job_id)
         assert data["type"] == "retrieve_test"
 
@@ -82,7 +103,10 @@ class TestJobsAPI:
         response = client.get(f"/api/v1/jobs/{fake_id}")
 
         assert response.status_code == 404
-        assert "not found" in response.json()["detail"].lower()
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "JOB_4001"
+        assert error_detail["httpStatus"] == "NOT_FOUND"
+        assert "not found" in error_detail["description"].lower()
 
     def test_cancel_job_success(self, client: TestClient, db_session):
         """Test canceling a pending job."""
@@ -91,7 +115,12 @@ class TestJobsAPI:
         response = client.post(f"/api/v1/jobs/{job.job_id}/cancel")
 
         assert response.status_code == 200
-        data = response.json()
+        json_response = response.json()
+
+        assert json_response["code"] == "JOB_0003"
+        assert json_response["httpStatus"] == "OK"
+
+        data = json_response["data"]
         assert data["status"] == "CANCELED"
         assert "canceled" in data["message"].lower()
 
@@ -102,7 +131,10 @@ class TestJobsAPI:
         response = client.post(f"/api/v1/jobs/{job.job_id}/cancel")
 
         assert response.status_code == 400
-        assert "transition" in response.json()["detail"].lower()
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "JOB_4003"
+        assert error_detail["httpStatus"] == "BAD_REQUEST"
+        assert "transition" in error_detail["description"].lower()
 
     def test_cancel_job_not_found(self, client: TestClient):
         """Test canceling non-existent job returns 404."""
@@ -110,3 +142,5 @@ class TestJobsAPI:
         response = client.post(f"/api/v1/jobs/{fake_id}/cancel")
 
         assert response.status_code == 404
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "JOB_4001"
