@@ -1,6 +1,6 @@
 """Workflow API endpoints."""
 from uuid import UUID
-from typing import Annotated
+from typing import Annotated, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from schedora.api.schemas.workflow import (
     WorkflowStatusResponse,
     AddJobToWorkflowRequest
 )
+from schedora.api.schemas.response import StandardResponse, ResponseCodes
 from schedora.services.workflow_service import WorkflowService
 from schedora.core.exceptions import (
     DuplicateWorkflowError,
@@ -20,11 +21,11 @@ from schedora.core.exceptions import (
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 
-@router.post("", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=StandardResponse[WorkflowResponse], status_code=status.HTTP_201_CREATED)
 def create_workflow(
     workflow_data: WorkflowCreate,
     db: Annotated[Session, Depends(get_db)]
-) -> WorkflowResponse:
+) -> StandardResponse[WorkflowResponse]:
     """
     Create a new workflow.
 
@@ -33,7 +34,7 @@ def create_workflow(
         db: Database session
 
     Returns:
-        WorkflowResponse: Created workflow
+        StandardResponse: Created workflow
 
     Raises:
         HTTPException: 409 if workflow with same name already exists
@@ -46,19 +47,29 @@ def create_workflow(
             description=workflow_data.description,
             config=workflow_data.config
         )
-        return WorkflowResponse.model_validate(workflow)
+        return StandardResponse(
+            data=WorkflowResponse.model_validate(workflow),
+            code=ResponseCodes.WORKFLOW_CREATED,
+            httpStatus="CREATED",
+            description="Workflow created successfully"
+        )
     except DuplicateWorkflowError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(e)
+            detail={
+                "data": None,
+                "code": ResponseCodes.WORKFLOW_DUPLICATE_NAME,
+                "httpStatus": "CONFLICT",
+                "description": str(e)
+            }
         )
 
 
-@router.get("/{workflow_id}", response_model=WorkflowResponse)
+@router.get("/{workflow_id}", response_model=StandardResponse[WorkflowResponse])
 def get_workflow(
     workflow_id: UUID,
     db: Annotated[Session, Depends(get_db)]
-) -> WorkflowResponse:
+) -> StandardResponse[WorkflowResponse]:
     """
     Get workflow by ID.
 
@@ -67,7 +78,7 @@ def get_workflow(
         db: Database session
 
     Returns:
-        WorkflowResponse: Workflow details
+        StandardResponse: Workflow details
 
     Raises:
         HTTPException: 404 if workflow not found
@@ -76,20 +87,30 @@ def get_workflow(
 
     try:
         workflow = service.get_workflow(workflow_id)
-        return WorkflowResponse.model_validate(workflow)
+        return StandardResponse(
+            data=WorkflowResponse.model_validate(workflow),
+            code=ResponseCodes.WORKFLOW_RETRIEVED,
+            httpStatus="OK",
+            description="Workflow retrieved successfully"
+        )
     except WorkflowNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail={
+                "data": None,
+                "code": ResponseCodes.WORKFLOW_NOT_FOUND,
+                "httpStatus": "NOT_FOUND",
+                "description": str(e)
+            }
         )
 
 
-@router.post("/{workflow_id}/jobs", status_code=status.HTTP_200_OK)
+@router.post("/{workflow_id}/jobs", response_model=StandardResponse[Dict[str, str]])
 def add_job_to_workflow(
     workflow_id: UUID,
     job_data: AddJobToWorkflowRequest,
     db: Annotated[Session, Depends(get_db)]
-) -> dict:
+) -> StandardResponse[Dict[str, str]]:
     """
     Add a job to a workflow.
 
@@ -99,7 +120,7 @@ def add_job_to_workflow(
         db: Database session
 
     Returns:
-        dict: Success message
+        StandardResponse: Success message
 
     Raises:
         HTTPException: 404 if workflow not found
@@ -108,19 +129,29 @@ def add_job_to_workflow(
 
     try:
         service.add_job_to_workflow(workflow_id, job_data.job_id)
-        return {"message": "Job added to workflow successfully"}
+        return StandardResponse(
+            data={"message": "Job added to workflow successfully"},
+            code=ResponseCodes.JOB_ADDED_TO_WORKFLOW,
+            httpStatus="OK",
+            description="Job added to workflow successfully"
+        )
     except WorkflowNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail={
+                "data": None,
+                "code": ResponseCodes.WORKFLOW_NOT_FOUND,
+                "httpStatus": "NOT_FOUND",
+                "description": str(e)
+            }
         )
 
 
-@router.get("/{workflow_id}/status", response_model=WorkflowStatusResponse)
+@router.get("/{workflow_id}/status", response_model=StandardResponse[WorkflowStatusResponse])
 def get_workflow_status(
     workflow_id: UUID,
     db: Annotated[Session, Depends(get_db)]
-) -> WorkflowStatusResponse:
+) -> StandardResponse[WorkflowStatusResponse]:
     """
     Get workflow execution status.
 
@@ -129,7 +160,7 @@ def get_workflow_status(
         db: Database session
 
     Returns:
-        WorkflowStatusResponse: Workflow status with job counts
+        StandardResponse: Workflow status with job counts
 
     Raises:
         HTTPException: 404 if workflow not found
@@ -138,9 +169,19 @@ def get_workflow_status(
 
     try:
         status_dict = service.get_workflow_status(workflow_id)
-        return WorkflowStatusResponse(**status_dict)
+        return StandardResponse(
+            data=WorkflowStatusResponse(**status_dict),
+            code=ResponseCodes.WORKFLOW_STATUS_RETRIEVED,
+            httpStatus="OK",
+            description="Workflow status retrieved successfully"
+        )
     except WorkflowNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail={
+                "data": None,
+                "code": ResponseCodes.WORKFLOW_NOT_FOUND,
+                "httpStatus": "NOT_FOUND",
+                "description": str(e)
+            }
         )

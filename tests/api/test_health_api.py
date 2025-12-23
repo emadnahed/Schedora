@@ -10,7 +10,12 @@ class TestHealthAPI:
         response = client.get("/api/v1/health")
 
         assert response.status_code == 200
-        data = response.json()
+        json_response = response.json()
+
+        assert json_response["code"] == "HEALTH_0001"
+        assert json_response["httpStatus"] == "OK"
+
+        data = json_response["data"]
         assert data["status"] == "healthy"
         assert "database" in data
 
@@ -18,5 +23,6 @@ class TestHealthAPI:
         """Test health check validates DB connection."""
         response = client.get("/api/v1/health")
 
-        data = response.json()
+        json_response = response.json()
+        data = json_response["data"]
         assert data["database"] == "connected"

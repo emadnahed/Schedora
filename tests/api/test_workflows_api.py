@@ -19,7 +19,12 @@ class TestWorkflowsAPI:
         )
 
         assert response.status_code == 201
-        data = response.json()
+        json_response = response.json()
+
+        assert json_response["code"] == "WF_0001"
+        assert json_response["httpStatus"] == "CREATED"
+
+        data = json_response["data"]
         assert data["name"] == "test_workflow"
         assert data["description"] == "Test workflow description"
         assert "workflow_id" in data
@@ -35,7 +40,9 @@ class TestWorkflowsAPI:
         )
 
         assert response.status_code == 201
-        data = response.json()
+        json_response = response.json()
+        data = json_response["data"]
+
         assert data["config"]["timeout"] == 3600
         assert data["config"]["retry"] is True
 
@@ -47,7 +54,9 @@ class TestWorkflowsAPI:
         )
 
         assert response.status_code == 201
-        data = response.json()
+        json_response = response.json()
+        data = json_response["data"]
+
         assert data["name"] == "minimal_workflow"
         assert data["description"] is None
 
@@ -58,7 +67,10 @@ class TestWorkflowsAPI:
         response = client.post("/api/v1/workflows", json={"name": "duplicate"})
 
         assert response.status_code == 409
-        assert "already exists" in response.json()["detail"].lower()
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "WF_4002"
+        assert error_detail["httpStatus"] == "CONFLICT"
+        assert "already exists" in error_detail["description"].lower()
 
     def test_create_workflow_validation_error(self, client: TestClient):
         """Test creating workflow without required fields returns 422."""
@@ -73,13 +85,18 @@ class TestWorkflowsAPI:
             "/api/v1/workflows",
             json={"name": "get_workflow"}
         )
-        workflow_id = create_response.json()["workflow_id"]
+        workflow_id = create_response.json()["data"]["workflow_id"]
 
         # Get the workflow
         response = client.get(f"/api/v1/workflows/{workflow_id}")
 
         assert response.status_code == 200
-        data = response.json()
+        json_response = response.json()
+
+        assert json_response["code"] == "WF_0002"
+        assert json_response["httpStatus"] == "OK"
+
+        data = json_response["data"]
         assert data["workflow_id"] == workflow_id
         assert data["name"] == "get_workflow"
 
@@ -91,7 +108,10 @@ class TestWorkflowsAPI:
         response = client.get(f"/api/v1/workflows/{fake_id}")
 
         assert response.status_code == 404
-        assert "not found" in response.json()["detail"].lower()
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "WF_4001"
+        assert error_detail["httpStatus"] == "NOT_FOUND"
+        assert "not found" in error_detail["description"].lower()
 
     def test_get_workflow_invalid_uuid(self, client: TestClient):
         """Test getting workflow with invalid UUID returns 422."""
@@ -106,7 +126,7 @@ class TestWorkflowsAPI:
             "/api/v1/workflows",
             json={"name": "add_job_workflow"}
         )
-        workflow_id = wf_response.json()["workflow_id"]
+        workflow_id = wf_response.json()["data"]["workflow_id"]
 
         # Create job
         job = create_job(db_session, job_type="test", idempotency_key="api-job-1")
@@ -118,7 +138,11 @@ class TestWorkflowsAPI:
         )
 
         assert response.status_code == 200
-        assert response.json()["message"] == "Job added to workflow successfully"
+        json_response = response.json()
+
+        assert json_response["code"] == "WF_0004"
+        assert json_response["httpStatus"] == "OK"
+        assert json_response["data"]["message"] == "Job added to workflow successfully"
 
     def test_add_job_to_workflow_not_found(self, client: TestClient, db_session):
         """Test adding job to non-existent workflow returns 404."""
@@ -132,6 +156,8 @@ class TestWorkflowsAPI:
         )
 
         assert response.status_code == 404
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "WF_4001"
 
     def test_get_workflow_status_success(self, client: TestClient, db_session):
         """Test getting workflow status."""
@@ -140,7 +166,7 @@ class TestWorkflowsAPI:
             "/api/v1/workflows",
             json={"name": "status_workflow"}
         )
-        workflow_id = wf_response.json()["workflow_id"]
+        workflow_id = wf_response.json()["data"]["workflow_id"]
 
         # Create and add jobs
         job1 = create_job(db_session, job_type="j1", status=JobStatus.SUCCESS, idempotency_key="status-1")
@@ -153,7 +179,12 @@ class TestWorkflowsAPI:
         response = client.get(f"/api/v1/workflows/{workflow_id}/status")
 
         assert response.status_code == 200
-        data = response.json()
+        json_response = response.json()
+
+        assert json_response["code"] == "WF_0003"
+        assert json_response["httpStatus"] == "OK"
+
+        data = json_response["data"]
         assert data["workflow_id"] == workflow_id
         assert data["workflow_name"] == "status_workflow"
         assert data["total_jobs"] == 2
@@ -169,3 +200,5 @@ class TestWorkflowsAPI:
         response = client.get(f"/api/v1/workflows/{fake_id}/status")
 
         assert response.status_code == 404
+        error_detail = response.json()["detail"]
+        assert error_detail["code"] == "WF_4001"
