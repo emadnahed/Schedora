@@ -35,3 +35,9 @@ class DuplicateWorkflowError(SchedoraException):
     """Raised when attempting to create a workflow with a duplicate name."""
 
     pass
+
+
+class WorkerNotFoundError(SchedoraException):
+    """Raised when a worker is not found in the database."""
+
+    pass

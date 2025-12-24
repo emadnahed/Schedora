@@ -2,7 +2,9 @@
 from typing import Generator, Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from redis import Redis
 from schedora.core.database import SessionLocal
+from schedora.core.redis import get_redis
 from schedora.services.job_service import JobService
 from schedora.services.workflow_service import WorkflowService
 
@@ -45,3 +47,13 @@ def get_workflow_service(db: Annotated[Session, Depends(get_db)]) -> WorkflowSer
         WorkflowService: Workflow service instance
     """
     return WorkflowService(db)
+
+
+def get_redis_client() -> Redis:
+    """
+    Dependency to get Redis client.
+
+    Returns:
+        Redis: Redis client instance
+    """
+    return get_redis()
