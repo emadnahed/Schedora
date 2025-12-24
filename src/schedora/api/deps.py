@@ -1,6 +1,6 @@
 """API dependencies for FastAPI."""
 from typing import Generator, Annotated
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from redis import Redis
 from schedora.core.database import SessionLocal
@@ -72,8 +72,6 @@ def get_redis_queue() -> RedisQueue:
     Raises:
         HTTPException: If Redis is not available
     """
-    from fastapi import HTTPException
-
     redis = get_redis()
     if not redis:
         raise HTTPException(status_code=503, detail="Redis not available")
