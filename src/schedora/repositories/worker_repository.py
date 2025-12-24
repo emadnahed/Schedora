@@ -133,9 +133,21 @@ class WorkerRepository:
             .all()
         )
 
+    def get_by_status(self, status: WorkerStatus) -> List[Worker]:
+        """
+        Get all workers with a specific status.
+
+        Args:
+            status: Worker status to filter by
+
+        Returns:
+            List[Worker]: List of workers with the given status
+        """
+        return self.db.query(Worker).filter(Worker.status == status).all()
+
     def increment_current_jobs(self, worker_id: str) -> Worker:
         """
-        Increment worker's current job count.
+        Increment worker's current job count atomically.
 
         Args:
             worker_id: Worker identifier
@@ -146,18 +158,26 @@ class WorkerRepository:
         Raises:
             ValueError: If worker not found
         """
-        worker = self.get_by_id(worker_id)
-        if not worker:
+        # Use atomic UPDATE to avoid race conditions
+        result = (
+            self.db.query(Worker)
+            .filter(Worker.worker_id == worker_id)
+            .update(
+                {Worker.current_job_count: Worker.current_job_count + 1},
+                synchronize_session=False
+            )
+        )
+
+        if result == 0:
             raise ValueError(f"Worker {worker_id} not found")
 
-        worker.current_job_count += 1
         self.db.commit()
-        self.db.refresh(worker)
+        worker = self.get_by_id(worker_id)
         return worker
 
     def decrement_current_jobs(self, worker_id: str) -> Worker:
         """
-        Decrement worker's current job count (minimum 0).
+        Decrement worker's current job count atomically (minimum 0).
 
         Args:
             worker_id: Worker identifier
@@ -168,13 +188,28 @@ class WorkerRepository:
         Raises:
             ValueError: If worker not found
         """
-        worker = self.get_by_id(worker_id)
-        if not worker:
+        from sqlalchemy import case
+
+        # Use atomic UPDATE with CASE to avoid race conditions and ensure minimum 0
+        result = (
+            self.db.query(Worker)
+            .filter(Worker.worker_id == worker_id)
+            .update(
+                {
+                    Worker.current_job_count: case(
+                        (Worker.current_job_count > 0, Worker.current_job_count - 1),
+                        else_=0
+                    )
+                },
+                synchronize_session=False
+            )
+        )
+
+        if result == 0:
             raise ValueError(f"Worker {worker_id} not found")
 
-        worker.current_job_count = max(0, worker.current_job_count - 1)
         self.db.commit()
-        self.db.refresh(worker)
+        worker = self.get_by_id(worker_id)
         return worker
 
     def delete_old_stopped_workers(self, cleanup_after_seconds: int) -> int:

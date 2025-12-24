@@ -205,4 +205,3 @@ class TestAsyncWorker:
         # Check metrics
         assert worker.jobs_processed >= 3
         assert worker.jobs_succeeded >= 3
-    async def test_worker_stop_with_timeout_waiting_for_jobs(self, db_session, caplog):

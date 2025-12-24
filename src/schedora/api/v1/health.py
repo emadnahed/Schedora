@@ -1,4 +1,5 @@
 """Health check API endpoint."""
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -11,6 +12,7 @@ from schedora.repositories.worker_repository import WorkerRepository
 from schedora.models.worker import Worker
 from schedora.core.enums import WorkerStatus
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -62,15 +64,16 @@ async def health_check(
         repo = WorkerRepository(db)
         all_workers = repo.get_all()
         active_workers = repo.get_all_active()
-        stale_workers = db.query(Worker).filter(Worker.status == WorkerStatus.STALE).all()
+        stale_workers = repo.get_by_status(WorkerStatus.STALE)
 
         worker_stats = WorkerStats(
             total=len(all_workers),
             active=len(active_workers),
             stale=len(stale_workers),
         )
-    except Exception:
-        pass  # Worker stats are optional
+    except Exception as e:
+        logger.warning(f"Failed to collect worker statistics: {e}")
+        # Worker stats are optional, continue without them
 
     overall_status = "healthy"
     if db_status != "connected" or redis_status != "connected":

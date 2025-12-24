@@ -5,11 +5,13 @@ import logging
 import socket
 import os
 import sys
+import psutil
 from schedora.core.database import SessionLocal
 from schedora.worker.async_worker import AsyncWorker
 from schedora.worker.handler_registry import HandlerRegistry
 from schedora.services.heartbeat_service import HeartbeatService
 from schedora.core.redis import get_redis
+from schedora.config import get_settings
 
 # Configure logging
 logging.basicConfig(
@@ -104,11 +106,16 @@ async def run_worker(
 
     # Start heartbeat sender
     async def send_heartbeats():
-        """Send periodic heartbeats."""
+        """Send periodic heartbeats with system metrics."""
+        settings = get_settings()
         while not stop_event.is_set():
             try:
-                heartbeat_service.send_heartbeat(worker_id)
-                await asyncio.sleep(30)  # Send heartbeat every 30 seconds
+                heartbeat_service.send_heartbeat(
+                    worker_id,
+                    cpu_percent=psutil.cpu_percent(),
+                    memory_percent=psutil.virtual_memory().percent
+                )
+                await asyncio.sleep(settings.WORKER_HEARTBEAT_INTERVAL)
             except asyncio.CancelledError:
                 break
             except Exception as e:

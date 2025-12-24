@@ -134,9 +134,9 @@ class BackgroundTaskManager:
         """
         Periodically clean up old stopped workers.
 
-        Runs every hour.
+        Runs at configured interval (default: 1 hour).
         """
-        interval = 3600  # 1 hour
+        interval = settings.WORKER_CLEANUP_INTERVAL
         logger.info(f"Worker cleanup task started (interval: {interval}s)")
 
         while not self._stop_event.is_set():

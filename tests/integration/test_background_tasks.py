@@ -238,8 +238,8 @@ class TestBackgroundTaskManager:
         worker.stopped_at = datetime.now(timezone.utc) - timedelta(hours=2)
         db_session.commit()
 
-        # Run cleanup directly
-        deleted_count = manager.heartbeat_service.cleanup_old_workers(older_than_hours=1)
+        # Run cleanup directly (uses config setting WORKER_CLEANUP_AFTER)
+        deleted_count = manager.heartbeat_service.cleanup_old_workers()
 
         # Verify worker was deleted
         assert deleted_count == 1
@@ -288,7 +288,7 @@ class TestBackgroundTaskManager:
 
         # Run one iteration of the cleanup task manually
         # (simulating what the background task would do)
-        deleted_count = manager.heartbeat_service.cleanup_old_workers(older_than_hours=1)
+        deleted_count = manager.heartbeat_service.cleanup_old_workers()
 
         # Check that cleanup worked
         assert deleted_count == 3

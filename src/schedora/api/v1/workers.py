@@ -115,8 +115,8 @@ def list_workers(
     if status_filter == "active":
         workers = repo.get_all_active()
     elif status_filter == "stale":
-        # Return workers with STALE status
-        workers = db.query(Worker).filter(Worker.status == WorkerStatus.STALE).all()
+        # Use repository method for consistency
+        workers = repo.get_by_status(WorkerStatus.STALE)
     else:
         workers = repo.get_all()
 

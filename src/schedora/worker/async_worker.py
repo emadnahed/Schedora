@@ -126,13 +126,7 @@ class AsyncWorker:
                         # Test mode: Execute synchronously in same thread
                         await self._execute_job_with_semaphore(job)
                     else:
-                        # Production: Force load all attributes before detaching
-                        _ = (job.job_id, job.type, job.payload, job.timeout_seconds,
-                             job.status, job.max_retries, job.retry_count)
-
-                        # Detach job from session to safely pass across threads
-                        self.db_session.expunge(job)
-
+                        # Production: Job already expunged in claim_sync
                         # Execute job with semaphore in background
                         task = asyncio.create_task(
                             self._execute_job_with_semaphore(job)
@@ -172,8 +166,10 @@ class AsyncWorker:
                 try:
                     scheduler = Scheduler(session, worker_id=self.worker_id)
                     job = scheduler.claim_job()
-                    # Expire all instances to allow refresh in different session
+                    # Force load all attributes before expunging
                     if job:
+                        _ = (job.job_id, job.type, job.payload, job.timeout_seconds,
+                             job.status, job.max_retries, job.retry_count)
                         session.expunge(job)
                     return job
                 except Exception as e:

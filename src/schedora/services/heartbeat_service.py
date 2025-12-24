@@ -157,7 +157,10 @@ class HeartbeatService:
             job = self.job_repo.get_by_id(job_id)
             if job and job.status == JobStatus.RUNNING:
                 job.status = JobStatus.PENDING
-                self.db.commit()
+
+        # Commit all changes at once for better performance
+        if job_ids:
+            self.db.commit()
 
         # Clear Redis job assignments
         jobs_key = f"worker:{worker_id}:jobs"
@@ -220,15 +223,13 @@ class HeartbeatService:
             worker.stopped_at = datetime.now(timezone.utc)
             self.db.commit()
 
-    def cleanup_old_workers(self, older_than_hours: int = 1) -> int:
+    def cleanup_old_workers(self) -> int:
         """
         Clean up old stopped workers from DB.
 
-        Args:
-            older_than_hours: Remove workers stopped longer than this
+        Uses WORKER_CLEANUP_AFTER from settings.
 
         Returns:
             int: Number of workers deleted
         """
-        cleanup_after_seconds = older_than_hours * 3600  # Convert hours to seconds
-        return self.worker_repo.delete_old_stopped_workers(cleanup_after_seconds)
+        return self.worker_repo.delete_old_stopped_workers(settings.WORKER_CLEANUP_AFTER)
