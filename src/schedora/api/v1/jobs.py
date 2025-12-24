@@ -1,8 +1,7 @@
 """Job API endpoints."""
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from schedora.api.deps import get_db
+from schedora.api.deps import get_job_service
 from schedora.api.schemas.job import JobCreate, JobResponse, JobCancelResponse
 from schedora.api.schemas.response import StandardResponse, ResponseCodes
 from schedora.services.job_service import JobService
@@ -18,7 +17,7 @@ router = APIRouter()
 @router.post("/jobs", response_model=StandardResponse[JobResponse], status_code=status.HTTP_201_CREATED)
 async def create_job(
     job_data: JobCreate,
-    db: Session = Depends(get_db),
+    job_service: JobService = Depends(get_job_service),
 ) -> StandardResponse[JobResponse]:
     """
     Create a new job.
@@ -28,7 +27,6 @@ async def create_job(
     - Returns created job with job_id
     """
     try:
-        job_service = JobService(db)
         job = job_service.create_job(job_data)
         return StandardResponse(
             data=JobResponse.model_validate(job),
@@ -51,7 +49,7 @@ async def create_job(
 @router.get("/jobs/{job_id}", response_model=StandardResponse[JobResponse])
 async def get_job(
     job_id: UUID,
-    db: Session = Depends(get_db),
+    job_service: JobService = Depends(get_job_service),
 ) -> StandardResponse[JobResponse]:
     """
     Get job by ID.
@@ -59,7 +57,6 @@ async def get_job(
     Returns full job details including current status.
     """
     try:
-        job_service = JobService(db)
         job = job_service.get_job(job_id)
         return StandardResponse(
             data=JobResponse.model_validate(job),
@@ -82,7 +79,7 @@ async def get_job(
 @router.post("/jobs/{job_id}/cancel", response_model=StandardResponse[JobCancelResponse])
 async def cancel_job(
     job_id: UUID,
-    db: Session = Depends(get_db),
+    job_service: JobService = Depends(get_job_service),
 ) -> StandardResponse[JobCancelResponse]:
     """
     Cancel a job.
@@ -91,7 +88,6 @@ async def cancel_job(
     - Returns updated job status
     """
     try:
-        job_service = JobService(db)
         job = job_service.cancel_job(job_id)
         cancel_response = JobCancelResponse(
             job_id=job.job_id,

@@ -56,11 +56,11 @@ class TestJobStateMachine:
             JobStatus.RETRYING, JobStatus.SCHEDULED
         ) is True
 
-    def test_invalid_transition_pending_to_running(self):
-        """Test invalid transition: PENDING -> RUNNING (must go through SCHEDULED)."""
+    def test_valid_transition_pending_to_running(self):
+        """Test valid transition: PENDING -> RUNNING (workers can claim and execute)."""
         assert JobStateMachine.can_transition(
             JobStatus.PENDING, JobStatus.RUNNING
-        ) is False
+        ) is True
 
     def test_invalid_transition_pending_to_success(self):
         """Test invalid transition: PENDING -> SUCCESS."""
@@ -135,7 +135,7 @@ class TestJobStateMachine:
     def test_get_valid_transitions_from_pending(self):
         """Test getting all valid next states from PENDING."""
         valid_states = JobStateMachine.get_valid_transitions(JobStatus.PENDING)
-        assert valid_states == {JobStatus.SCHEDULED, JobStatus.CANCELED}
+        assert valid_states == {JobStatus.SCHEDULED, JobStatus.RUNNING, JobStatus.CANCELED}
 
     def test_get_valid_transitions_from_running(self):
         """Test getting all valid next states from RUNNING."""

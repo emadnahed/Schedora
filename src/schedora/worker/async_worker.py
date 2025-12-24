@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from typing import Optional, Set
+from uuid import UUID
 from sqlalchemy.orm import Session
 from schedora.worker.handler_registry import HandlerRegistry
 from schedora.worker.job_executor import JobExecutor
@@ -18,7 +19,8 @@ class AsyncWorker:
     Async worker that polls for jobs and executes them concurrently.
 
     Uses asyncio semaphore for concurrency control and adaptive
-    polling with backoff.
+    polling with backoff. Supports both Redis queue-based job
+    distribution and legacy DB polling.
     """
 
     def __init__(
@@ -29,6 +31,7 @@ class AsyncWorker:
         max_concurrent_jobs: int = 10,
         poll_interval: float = 1.0,
         use_test_session: bool = False,
+        queue: Optional["RedisQueue"] = None,
     ):
         """
         Initialize async worker.
@@ -40,6 +43,7 @@ class AsyncWorker:
             max_concurrent_jobs: Maximum concurrent jobs
             poll_interval: Polling interval in seconds
             use_test_session: If True, reuse db_session for all operations (testing only)
+            queue: Optional Redis queue for job distribution (if None, uses DB polling)
         """
         self.worker_id = worker_id
         self.db_session = db_session
@@ -47,6 +51,7 @@ class AsyncWorker:
         self.max_concurrent_jobs = max_concurrent_jobs
         self.poll_interval = poll_interval
         self.use_test_session = use_test_session
+        self.queue = queue
 
         # Concurrency control
         self._semaphore = asyncio.Semaphore(max_concurrent_jobs)
@@ -54,7 +59,7 @@ class AsyncWorker:
 
         # Services
         self.scheduler = Scheduler(db_session, worker_id=worker_id)
-        self.job_service = JobService(db_session)
+        self.job_service = JobService(db_session, queue=queue)
         self.adapter = DatabaseAdapter(job_service=self.job_service)
         self.executor = JobExecutor(
             handler_registry,
@@ -145,7 +150,76 @@ class AsyncWorker:
 
     async def _claim_job(self) -> Optional[Job]:
         """
-        Claim a job from the scheduler.
+        Claim a job from Redis queue or scheduler.
+
+        If queue is available, dequeues from Redis then loads from DB.
+        Otherwise falls back to DB polling via scheduler.
+
+        Returns:
+            Optional[Job]: Claimed job or None
+        """
+        if self.queue:
+            # Redis queue mode: dequeue job ID then claim from DB
+            return await self._dequeue_and_claim()
+        else:
+            # Legacy DB polling mode
+            return await self._claim_from_db()
+
+    async def _dequeue_and_claim(self) -> Optional[Job]:
+        """
+        Dequeue job from Redis and claim from DB.
+
+        Returns:
+            Optional[Job]: Claimed job or None
+        """
+        if self.use_test_session:
+            # Test mode: direct call
+            try:
+                job_id = self.queue.dequeue()
+                if job_id:
+                    return self.scheduler.claim_job(job_id=job_id)
+                return None
+            except Exception as e:
+                logger.error(f"Error dequeuing/claiming job: {e}", exc_info=True)
+                return None
+        else:
+            # Production: thread-safe
+            def dequeue_and_claim_sync():
+                from schedora.core.database import SessionLocal
+                from schedora.services.scheduler import Scheduler
+
+                try:
+                    # Dequeue from Redis (thread-safe)
+                    job_id = self.queue.dequeue()
+                    if not job_id:
+                        return None
+
+                    # Claim from DB in separate session
+                    session = SessionLocal()
+                    try:
+                        scheduler = Scheduler(session, worker_id=self.worker_id)
+                        job = scheduler.claim_job(job_id=job_id)
+                        # Force load all attributes before expunging
+                        if job:
+                            _ = (job.job_id, job.type, job.payload, job.timeout_seconds,
+                                 job.status, job.max_retries, job.retry_count)
+                            session.expunge(job)
+                        return job
+                    finally:
+                        session.close()
+                except Exception as e:
+                    logger.error(f"Error in dequeue_and_claim_sync: {e}", exc_info=True)
+                    return None
+
+            try:
+                return await asyncio.to_thread(dequeue_and_claim_sync)
+            except Exception as e:
+                logger.error(f"Error dequeuing/claiming job: {e}", exc_info=True)
+                return None
+
+    async def _claim_from_db(self) -> Optional[Job]:
+        """
+        Claim job from DB using scheduler (legacy mode).
 
         Returns:
             Optional[Job]: Claimed job or None
