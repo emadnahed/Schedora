@@ -22,7 +22,7 @@ class Scheduler:
         self.db = db
         self.worker_id = worker_id or f"worker-{uuid.uuid4()}"
 
-    def claim_job(self) -> Optional[Job]:
+    def claim_job(self, job_id: Optional[uuid.UUID] = None) -> Optional[Job]:
         """
         Claim a single ready job atomically.
 
@@ -34,6 +34,9 @@ class Scheduler:
         - Status: PENDING
         - scheduled_at <= now
         - Dependencies met (if any)
+
+        Args:
+            job_id: Optional specific job ID to claim. If None, claims any ready job.
 
         Returns:
             Job: Claimed job or None if no jobs available
@@ -47,18 +50,23 @@ class Scheduler:
             .where(Job.status != JobStatus.SUCCESS)
         )
 
+        # Build filters
+        filters = [
+            Job.status == JobStatus.PENDING,
+            Job.scheduled_at <= now,
+            ~Job.job_id.in_(unmet_deps_subquery)  # Only jobs with met dependencies
+        ]
+
+        # Add specific job ID filter if provided
+        if job_id:
+            filters.append(Job.job_id == job_id)
+
         # Query for pending jobs that are ready to be scheduled
         # Include dependency check in the query to avoid locking jobs that aren't ready
         # Use FOR UPDATE SKIP LOCKED to prevent concurrent claims
         job = (
             self.db.query(Job)
-            .filter(
-                and_(
-                    Job.status == JobStatus.PENDING,
-                    Job.scheduled_at <= now,
-                    ~Job.job_id.in_(unmet_deps_subquery)  # Only jobs with met dependencies
-                )
-            )
+            .filter(and_(*filters))
             .with_for_update(skip_locked=True)
             .first()
         )

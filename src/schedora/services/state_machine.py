@@ -10,16 +10,16 @@ class JobStateMachine:
     Ensures atomic and valid state changes.
 
     State Diagram:
-        PENDING → SCHEDULED → RUNNING → SUCCESS/FAILED
-                                   ↓         ↓
-                               RETRYING   DEAD
+        PENDING → SCHEDULED → PENDING → RUNNING → SUCCESS/FAILED
+                                             ↓         ↓
+                                         RETRYING   DEAD
              CANCELED (from any non-terminal)
     """
 
     # Define valid transitions as a mapping from current state to allowed next states
     TRANSITIONS: Dict[JobStatus, Set[JobStatus]] = {
-        JobStatus.PENDING: {JobStatus.SCHEDULED, JobStatus.CANCELED},
-        JobStatus.SCHEDULED: {JobStatus.RUNNING, JobStatus.CANCELED},
+        JobStatus.PENDING: {JobStatus.SCHEDULED, JobStatus.RUNNING, JobStatus.CANCELED},
+        JobStatus.SCHEDULED: {JobStatus.PENDING, JobStatus.RUNNING, JobStatus.CANCELED},
         JobStatus.RUNNING: {
             JobStatus.SUCCESS,
             JobStatus.FAILED,
