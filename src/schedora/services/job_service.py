@@ -1,5 +1,6 @@
 """Job service for business logic."""
 from uuid import UUID
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from schedora.repositories.job_repository import JobRepository
@@ -17,15 +18,17 @@ from schedora.core.exceptions import (
 class JobService:
     """Service for job business logic and orchestration."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, queue: Optional["RedisQueue"] = None):
         """
         Initialize service with database session.
 
         Args:
             db: SQLAlchemy database session
+            queue: Optional RedisQueue for job distribution
         """
         self.db = db
         self.repository = JobRepository(db)
+        self.queue = queue
 
     def create_job(self, job_data: JobCreate) -> Job:
         """
@@ -49,6 +52,12 @@ class JobService:
 
         try:
             job = self.repository.create(job_data.model_dump())
+            self.db.commit()
+
+            # Enqueue to Redis if status is PENDING and queue is available
+            if self.queue and job.status == JobStatus.PENDING:
+                self.queue.enqueue(job.job_id, priority=job.priority)
+
             return job
         except IntegrityError as e:
             # Handle race condition where duplicate was inserted between check and create
@@ -96,7 +105,13 @@ class JobService:
         JobStateMachine.validate_transition(job.status, JobStatus.CANCELED)
 
         # Update status
-        return self.repository.update_status(job_id, JobStatus.CANCELED)
+        updated_job = self.repository.update_status(job_id, JobStatus.CANCELED)
+
+        # Remove from queue if present
+        if self.queue:
+            self.queue.remove(job_id)
+
+        return updated_job
 
     def transition_status(self, job_id: UUID, new_status: JobStatus) -> Job:
         """
@@ -119,4 +134,10 @@ class JobService:
         JobStateMachine.validate_transition(job.status, new_status)
 
         # Update status
-        return self.repository.update_status(job_id, new_status)
+        updated_job = self.repository.update_status(job_id, new_status)
+
+        # Enqueue if transitioning to PENDING
+        if self.queue and new_status == JobStatus.PENDING:
+            self.queue.enqueue(job_id, priority=updated_job.priority)
+
+        return updated_job

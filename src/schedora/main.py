@@ -1,7 +1,9 @@
 """FastAPI application factory."""
 from fastapi import FastAPI
 from schedora.config import get_settings
-from schedora.api.v1 import jobs, health, workflows, workers
+from schedora.api.v1 import jobs, health, workflows, workers, queue, metrics
+from schedora.observability.metrics import init_system_info
+from schedora.observability.middleware import MetricsMiddleware
 
 settings = get_settings()
 
@@ -19,11 +21,19 @@ def create_app() -> FastAPI:
         debug=settings.DEBUG,
     )
 
+    # Add middleware
+    app.add_middleware(MetricsMiddleware)
+
+    # Initialize metrics
+    init_system_info(settings.APP_VERSION)
+
     # Include routers
     app.include_router(jobs.router, prefix=settings.API_V1_PREFIX, tags=["jobs"])
     app.include_router(health.router, prefix=settings.API_V1_PREFIX, tags=["health"])
     app.include_router(workflows.router, prefix=settings.API_V1_PREFIX, tags=["workflows"])
     app.include_router(workers.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(queue.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(metrics.router, prefix=settings.API_V1_PREFIX)
 
     return app
 
