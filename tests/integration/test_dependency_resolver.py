@@ -116,3 +116,43 @@ class TestDependencyResolver:
         db_session.commit()
 
         assert resolver.has_failed_dependencies(job) is False
+
+    def test_get_blocked_jobs(self, db_session):
+        """Test getting jobs blocked by failed dependencies."""
+        resolver = DependencyResolver(db_session)
+
+        # Create failed dependency
+        failed_dep = create_job(db_session, job_type="dep", status=JobStatus.FAILED, idempotency_key="failed-dep-1")
+        dead_dep = create_job(db_session, job_type="dep", status=JobStatus.DEAD, idempotency_key="dead-dep-1")
+        canceled_dep = create_job(db_session, job_type="dep", status=JobStatus.CANCELED, idempotency_key="canceled-dep-1")
+
+        # Job 1: Blocked by failed dependency
+        job1 = create_job(db_session, job_type="job1", status=JobStatus.PENDING, idempotency_key="blocked-1")
+        job1.dependencies.append(failed_dep)
+
+        # Job 2: Blocked by dead dependency
+        job2 = create_job(db_session, job_type="job2", status=JobStatus.PENDING, idempotency_key="blocked-2")
+        job2.dependencies.append(dead_dep)
+
+        # Job 3: Blocked by canceled dependency
+        job3 = create_job(db_session, job_type="job3", status=JobStatus.PENDING, idempotency_key="blocked-3")
+        job3.dependencies.append(canceled_dep)
+
+        # Job 4: Not blocked (success dependency)
+        success_dep = create_job(db_session, job_type="dep", status=JobStatus.SUCCESS, idempotency_key="success-dep-1")
+        job4 = create_job(db_session, job_type="job4", status=JobStatus.PENDING, idempotency_key="not-blocked-1")
+        job4.dependencies.append(success_dep)
+
+        # Job 5: Not blocked (no dependencies)
+        job5 = create_job(db_session, job_type="job5", status=JobStatus.PENDING, idempotency_key="not-blocked-2")
+
+        db_session.commit()
+
+        blocked_jobs = resolver.get_blocked_jobs()
+
+        assert len(blocked_jobs) == 3
+        assert job1 in blocked_jobs
+        assert job2 in blocked_jobs
+        assert job3 in blocked_jobs
+        assert job4 not in blocked_jobs
+        assert job5 not in blocked_jobs

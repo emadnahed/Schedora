@@ -139,3 +139,13 @@ class TestWorkflowRepository:
         assert "workflow1" in names
         assert "workflow2" in names
         assert "workflow3" in names
+
+    def test_get_workflow_jobs_nonexistent(self, db_session):
+        """Test getting jobs from nonexistent workflow returns empty list."""
+        from uuid import uuid4
+        repo = WorkflowRepository(db_session)
+
+        fake_id = uuid4()
+        jobs = repo.get_workflow_jobs(fake_id)
+
+        assert jobs == []

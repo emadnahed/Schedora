@@ -1,7 +1,7 @@
 """FastAPI application factory."""
 from fastapi import FastAPI
 from schedora.config import get_settings
-from schedora.api.v1 import jobs, health, workflows
+from schedora.api.v1 import jobs, health, workflows, workers
 
 settings = get_settings()
 
@@ -23,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router, prefix=settings.API_V1_PREFIX, tags=["jobs"])
     app.include_router(health.router, prefix=settings.API_V1_PREFIX, tags=["health"])
     app.include_router(workflows.router, prefix=settings.API_V1_PREFIX, tags=["workflows"])
+    app.include_router(workers.router, prefix=settings.API_V1_PREFIX)
 
     return app
 
