@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from schedora.services.redis_queue import RedisQueue
-from schedora.core.redis import get_redis
+from schedora.api.deps import get_redis_queue
 
 
 router = APIRouter(prefix="/queue", tags=["queue"])
@@ -28,19 +28,13 @@ class QueuePeekResponse(BaseModel):
 
 
 @router.get("/stats", response_model=QueueStatsResponse)
-def get_queue_stats():
+def get_queue_stats(queue: RedisQueue = Depends(get_redis_queue)):
     """
     Get queue statistics.
 
     Returns:
         QueueStatsResponse: Queue and DLQ lengths
     """
-    redis = get_redis()
-    if not redis:
-        raise HTTPException(status_code=503, detail="Redis not available")
-
-    queue = RedisQueue(redis)
-
     return QueueStatsResponse(
         pending_jobs=queue.get_queue_length(),
         dlq_jobs=queue.get_dlq_length(),
@@ -48,7 +42,7 @@ def get_queue_stats():
 
 
 @router.post("/purge", response_model=QueuePurgeResponse)
-def purge_queue():
+def purge_queue(queue: RedisQueue = Depends(get_redis_queue)):
     """
     Purge all jobs from the main queue.
 
@@ -57,18 +51,12 @@ def purge_queue():
     Returns:
         QueuePurgeResponse: Success message
     """
-    redis = get_redis()
-    if not redis:
-        raise HTTPException(status_code=503, detail="Redis not available")
-
-    queue = RedisQueue(redis)
     queue.purge()
-
     return QueuePurgeResponse(message="Queue purged successfully")
 
 
 @router.post("/dlq/purge", response_model=QueuePurgeResponse)
-def purge_dlq():
+def purge_dlq(queue: RedisQueue = Depends(get_redis_queue)):
     """
     Purge all jobs from the dead letter queue.
 
@@ -77,18 +65,12 @@ def purge_dlq():
     Returns:
         QueuePurgeResponse: Success message
     """
-    redis = get_redis()
-    if not redis:
-        raise HTTPException(status_code=503, detail="Redis not available")
-
-    queue = RedisQueue(redis)
     queue.purge_dlq()
-
     return QueuePurgeResponse(message="DLQ purged successfully")
 
 
 @router.get("/peek", response_model=QueuePeekResponse)
-def peek_next_job():
+def peek_next_job(queue: RedisQueue = Depends(get_redis_queue)):
     """
     Peek at the next job in queue without removing it.
 
@@ -98,11 +80,6 @@ def peek_next_job():
     Raises:
         HTTPException: 404 if queue is empty
     """
-    redis = get_redis()
-    if not redis:
-        raise HTTPException(status_code=503, detail="Redis not available")
-
-    queue = RedisQueue(redis)
     job_id = queue.peek()
 
     if not job_id:

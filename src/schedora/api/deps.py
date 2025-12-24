@@ -60,3 +60,21 @@ def get_redis_client() -> Redis:
         Redis: Redis client instance
     """
     return get_redis()
+
+
+def get_redis_queue() -> RedisQueue:
+    """
+    Dependency to get RedisQueue instance.
+
+    Returns:
+        RedisQueue: Redis queue instance
+
+    Raises:
+        HTTPException: If Redis is not available
+    """
+    from fastapi import HTTPException
+
+    redis = get_redis()
+    if not redis:
+        raise HTTPException(status_code=503, detail="Redis not available")
+    return RedisQueue(redis)

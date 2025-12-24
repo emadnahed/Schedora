@@ -111,6 +111,7 @@ class JobService:
         if self.queue:
             self.queue.remove(job_id)
 
+        self.db.commit()
         return updated_job
 
     def transition_status(self, job_id: UUID, new_status: JobStatus) -> Job:
@@ -140,4 +141,5 @@ class JobService:
         if self.queue and new_status == JobStatus.PENDING:
             self.queue.enqueue(job_id, priority=updated_job.priority)
 
+        self.db.commit()
         return updated_job

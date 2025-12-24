@@ -2,7 +2,7 @@
 import time
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Histogram, Gauge
 
 
 # HTTP metrics
@@ -19,7 +19,7 @@ http_request_duration_seconds = Histogram(
     buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
 )
 
-http_requests_in_progress = Counter(
+http_requests_in_progress = Gauge(
     'schedora_http_requests_in_progress',
     'HTTP requests currently in progress',
     ['method', 'endpoint']
@@ -49,6 +49,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
         # Track request start
         start_time = time.time()
+        http_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
 
         try:
             # Process request
@@ -87,3 +88,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             ).observe(duration)
 
             raise e
+
+        finally:
+            # Always decrement in-progress count
+            http_requests_in_progress.labels(method=method, endpoint=endpoint).dec()

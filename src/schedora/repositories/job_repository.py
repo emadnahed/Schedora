@@ -38,7 +38,7 @@ class JobRepository:
             job.status = JobStatus.SCHEDULED
 
         self.db.add(job)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(job)
         return job
 
@@ -89,6 +89,6 @@ class JobRepository:
             raise JobNotFoundError(f"Job {job_id} not found")
 
         job.status = status
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(job)
         return job
