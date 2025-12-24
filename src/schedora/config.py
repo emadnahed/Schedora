@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # Testing
     TEST_DATABASE_URL: Optional[str] = None
 
+    # Worker heartbeat configuration
+    WORKER_HEARTBEAT_INTERVAL: int = 30  # Seconds between heartbeats
+    WORKER_HEARTBEAT_TIMEOUT: int = 90  # Seconds before worker considered stale
+    WORKER_STALE_CHECK_INTERVAL: int = 60  # Seconds between stale worker checks
+    WORKER_CLEANUP_AFTER: int = 3600  # Seconds before removing stopped workers
+    WORKER_CLEANUP_INTERVAL: int = 3600  # Seconds between cleanup task runs
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

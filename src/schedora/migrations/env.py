@@ -18,6 +18,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from schedora.core.database import Base
 from schedora.models.job import Job  # noqa: F401 - Import to register with Base
+from schedora.models.workflow import Workflow  # noqa: F401 - Import to register with Base
+from schedora.models.worker import Worker  # noqa: F401 - Import to register with Base
 from schedora.config import get_settings
 
 target_metadata = Base.metadata

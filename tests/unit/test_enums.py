@@ -1,6 +1,6 @@
 """Unit tests for core enums."""
 import pytest
-from schedora.core.enums import JobStatus, RetryPolicy
+from schedora.core.enums import JobStatus, RetryPolicy, WorkerStatus
 
 
 class TestJobStatusEnum:
@@ -71,3 +71,36 @@ class TestRetryPolicyEnum:
         """Test RetryPolicy can be used as strings."""
         assert str(RetryPolicy.FIXED) == "fixed"
         assert str(RetryPolicy.EXPONENTIAL) == "exponential"
+
+
+class TestWorkerStatusEnum:
+    """Test WorkerStatus enum values and behavior."""
+
+    def test_worker_status_has_starting(self):
+        """Test WorkerStatus has STARTING state."""
+        assert WorkerStatus.STARTING.value == "STARTING"
+
+    def test_worker_status_has_active(self):
+        """Test WorkerStatus has ACTIVE state."""
+        assert WorkerStatus.ACTIVE.value == "ACTIVE"
+
+    def test_worker_status_has_stale(self):
+        """Test WorkerStatus has STALE state."""
+        assert WorkerStatus.STALE.value == "STALE"
+
+    def test_worker_status_has_stopping(self):
+        """Test WorkerStatus has STOPPING state."""
+        assert WorkerStatus.STOPPING.value == "STOPPING"
+
+    def test_worker_status_has_stopped(self):
+        """Test WorkerStatus has STOPPED state."""
+        assert WorkerStatus.STOPPED.value == "STOPPED"
+
+    def test_worker_status_count(self):
+        """Test WorkerStatus has exactly 5 states."""
+        assert len(WorkerStatus) == 5
+
+    def test_worker_status_string_representation(self):
+        """Test WorkerStatus can be used as strings."""
+        assert str(WorkerStatus.ACTIVE) == "ACTIVE"
+        assert str(WorkerStatus.STOPPED) == "STOPPED"
