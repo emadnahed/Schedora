@@ -41,6 +41,22 @@ class Settings(BaseSettings):
     WORKER_CLEANUP_AFTER: int = 3600  # Seconds before removing stopped workers
     WORKER_CLEANUP_INTERVAL: int = 3600  # Seconds between cleanup task runs
 
+    # Authentication & Security
+    SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION_USE_OPENSSL_RAND_HEX_32"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+
+    # Feature Flags
+    ENABLE_AUTH: bool = True  # Enable authentication system
+    REQUIRE_AUTH: bool = False  # Require authentication on all endpoints (set True after migration)
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_ADMIN_PER_MINUTE: int = 120
+    RATE_LIMIT_ADMIN_PER_HOUR: int = 5000
+    RATE_LIMIT_USER_PER_MINUTE: int = 60
+    RATE_LIMIT_USER_PER_HOUR: int = 1000
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
